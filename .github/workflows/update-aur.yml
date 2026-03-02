@@ -70,11 +70,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "$AUR_SSH_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
-          cat > ~/.ssh/config << 'SSHEOF'
-          Host aur.archlinux.org
-            IdentityFile ~/.ssh/aur
-            StrictHostKeyChecking no
-          SSHEOF
+          printf 'Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  StrictHostKeyChecking no\n' > ~/.ssh/config
 
       - name: Push to AUR
         run: |
