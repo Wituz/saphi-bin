@@ -91,6 +91,12 @@ jobs:
             StrictHostKeyChecking no
           SSHEOF
 
-          # Push to AUR
-          git remote add aur ssh://aur@aur.archlinux.org/saphi-bin.git || true
-          git push aur master
+          # Push to AUR (only flat files allowed, no subdirectories)
+          git clone ssh://aur@aur.archlinux.org/saphi-bin.git /tmp/aur-pkg
+          cp PKGBUILD .SRCINFO saphi.desktop /tmp/aur-pkg/
+          cd /tmp/aur-pkg
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Update to ${{ steps.release.outputs.pkgver }}"
+          git push
