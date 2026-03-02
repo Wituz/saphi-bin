@@ -1,0 +1,86 @@
+name: Update AUR Package
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Check every 6 hours
+  workflow_dispatch:        # Allow manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install dependencies
+        run: pacman -Syu --noconfirm git openssh
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get latest upstream release
+        id: release
+        run: |
+          # Fetch latest release tag from GitHub API
+          TAG=$(curl -s https://api.github.com/repos/Project-Saphi/Saphi/releases/latest | grep '"tag_name"' | sed 's/.*: "//;s/".*//')
+          # Convert tag (v0-0-8-1-0-0-8-0beta) to pkgver (0.0.8.1.0.0.8.0beta)
+          PKGVER=$(echo "$TAG" | sed 's/^v//;s/-/./g')
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "pkgver=$PKGVER" >> "$GITHUB_OUTPUT"
+          echo "Latest release: $TAG -> pkgver $PKGVER"
+
+      - name: Get current pkgver
+        id: current
+        run: |
+          CURRENT=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
+          echo "pkgver=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "Current pkgver: $CURRENT"
+
+      - name: Check if update is needed
+        id: check
+        run: |
+          if [ "${{ steps.release.outputs.pkgver }}" = "${{ steps.current.outputs.pkgver }}" ]; then
+            echo "Already up to date"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Update needed: ${{ steps.current.outputs.pkgver }} -> ${{ steps.release.outputs.pkgver }}"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update PKGBUILD
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.release.outputs.pkgver }}/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+
+      - name: Generate .SRCINFO
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          # makepkg refuses to run as root, so create a temp user
+          useradd -m builder
+          chown -R builder:builder .
+          su builder -c "makepkg --printsrcinfo > .SRCINFO"
+
+      - name: Push to GitHub and AUR
+        if: steps.check.outputs.needed == 'true'
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Commit changes
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to ${{ steps.release.outputs.pkgver }}"
+
+          # Push to GitHub
+          git push origin master
+
+          # Set up SSH for AUR
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          echo -e "Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  StrictHostKeyChecking no" > ~/.ssh/config
+
+          # Push to AUR
+          git remote add aur ssh://aur@aur.archlinux.org/saphi-bin.git || true
+          git push aur master
