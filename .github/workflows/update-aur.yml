@@ -22,66 +22,51 @@ jobs:
       - name: Get latest upstream release
         id: release
         run: |
-          # Fetch latest release tag from GitHub API
           TAG=$(curl -s https://api.github.com/repos/Project-Saphi/Saphi/releases/latest | grep '"tag_name"' | sed 's/.*: "//;s/".*//')
-          # Convert tag (v0-0-8-1-0-0-8-0beta) to pkgver (0.0.8.1.0.0.8.0beta)
           PKGVER=$(echo "$TAG" | sed 's/^v//;s/-/./g')
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "pkgver=$PKGVER" >> "$GITHUB_OUTPUT"
           echo "Latest release: $TAG -> pkgver $PKGVER"
 
-      - name: Get current pkgver
-        id: current
+      - name: Check if GitHub needs updating
+        id: check_github
         run: |
           CURRENT=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
-          echo "pkgver=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "Current pkgver: $CURRENT"
-
-      - name: Check if update is needed
-        id: check
-        run: |
-          if [ "${{ steps.release.outputs.pkgver }}" = "${{ steps.current.outputs.pkgver }}" ]; then
-            echo "Already up to date"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          if [ "${{ steps.release.outputs.pkgver }}" = "$CURRENT" ]; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Update needed: ${{ steps.current.outputs.pkgver }} -> ${{ steps.release.outputs.pkgver }}"
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Update PKGBUILD
-        if: steps.check.outputs.needed == 'true'
+        if: steps.check_github.outputs.needed == 'true'
         run: |
           sed -i "s/^pkgver=.*/pkgver=${{ steps.release.outputs.pkgver }}/" PKGBUILD
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
       - name: Generate .SRCINFO
-        if: steps.check.outputs.needed == 'true'
+        if: steps.check_github.outputs.needed == 'true'
         run: |
-          # makepkg refuses to run as root, so create a temp user
           useradd -m builder
           chown -R builder:builder .
           su builder -c "makepkg --printsrcinfo > .SRCINFO"
-          # Restore ownership so git works in subsequent steps
           chown -R root:root .
 
-      - name: Push to GitHub and AUR
-        if: steps.check.outputs.needed == 'true'
-        env:
-          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+      - name: Push to GitHub
+        if: steps.check_github.outputs.needed == 'true'
         run: |
-          # Configure git
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Commit changes
           git add PKGBUILD .SRCINFO
           git commit -m "Update to ${{ steps.release.outputs.pkgver }}"
-
-          # Push to GitHub
           git push origin master
 
-          # Set up SSH for AUR
+      - name: Set up SSH for AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
           mkdir -p ~/.ssh
           echo "$AUR_SSH_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
@@ -91,12 +76,22 @@ jobs:
             StrictHostKeyChecking no
           SSHEOF
 
-          # Push to AUR (only flat files allowed, no subdirectories)
+      - name: Push to AUR
+        run: |
+          # Clone AUR repo and check if it needs updating
           git clone ssh://aur@aur.archlinux.org/saphi-bin.git /tmp/aur-pkg
+          AUR_VER=$(grep '^pkgver=' /tmp/aur-pkg/PKGBUILD | cut -d= -f2)
+          echo "AUR version: $AUR_VER"
+          echo "Latest version: ${{ steps.release.outputs.pkgver }}"
+          if [ "$AUR_VER" = "${{ steps.release.outputs.pkgver }}" ]; then
+            echo "AUR already up to date"
+            exit 0
+          fi
+          # Copy updated files (flat only, no subdirectories)
           cp PKGBUILD .SRCINFO saphi.desktop /tmp/aur-pkg/
           cd /tmp/aur-pkg
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || git commit -m "Update to ${{ steps.release.outputs.pkgver }}"
+          git commit -m "Update to ${{ steps.release.outputs.pkgver }}"
           git push
