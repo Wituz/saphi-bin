@@ -85,7 +85,11 @@ jobs:
           mkdir -p ~/.ssh
           echo "$AUR_SSH_KEY" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
-          echo -e "Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  StrictHostKeyChecking no" > ~/.ssh/config
+          cat > ~/.ssh/config << 'SSHEOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            StrictHostKeyChecking no
+          SSHEOF
 
           # Push to AUR
           git remote add aur ssh://aur@aur.archlinux.org/saphi-bin.git || true
