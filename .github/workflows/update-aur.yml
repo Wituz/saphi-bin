@@ -58,6 +58,8 @@ jobs:
           useradd -m builder
           chown -R builder:builder .
           su builder -c "makepkg --printsrcinfo > .SRCINFO"
+          # Restore ownership so git works in subsequent steps
+          chown -R root:root .
 
       - name: Push to GitHub and AUR
         if: steps.check.outputs.needed == 'true'
@@ -65,6 +67,7 @@ jobs:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
           # Configure git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
