@@ -67,10 +67,11 @@ jobs:
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "$AUR_SSH_KEY" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          printf 'Host aur.archlinux.org\n  IdentityFile ~/.ssh/aur\n  StrictHostKeyChecking no\n' > ~/.ssh/config
+          mkdir -p /root/.ssh
+          echo "$AUR_SSH_KEY" > /root/.ssh/aur
+          chmod 600 /root/.ssh/aur
+          printf 'Host aur.archlinux.org\n  IdentityFile /root/.ssh/aur\n  StrictHostKeyChecking accept-new\n  UserKnownHostsFile /dev/null\n' > /root/.ssh/config
+          ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts 2>/dev/null
 
       - name: Push to AUR
         run: |
