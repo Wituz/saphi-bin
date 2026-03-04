@@ -16,17 +16,15 @@ sha256sums=('SKIP'  # Checksum changes with each release; using /latest/ URL
             'e5ccdd99dfb2a4a0ee876072eb3c6a13f5be15ae0834910d7520abf33bc89834')
 
 package() {
-    cd "${srcdir}/Saphi"
-
     # Install main application
     install -dm755 "${pkgdir}/opt/saphi"
-    cp -r Client/* "${pkgdir}/opt/saphi/"
+    cp -r "${srcdir}/Client"/* "${pkgdir}/opt/saphi/"
 
     # Make executable
     chmod +x "${pkgdir}/opt/saphi/Client"
 
     # Install icon
-    install -Dm644 Client/data/wheel_icon.png "${pkgdir}/usr/share/pixmaps/saphi.png"
+    install -Dm644 "${srcdir}/Client/data/wheel_icon.png" "${pkgdir}/usr/share/pixmaps/saphi.png"
 
     # Install desktop file
     install -Dm644 "${srcdir}/saphi.desktop" "${pkgdir}/usr/share/applications/saphi.desktop"
