@@ -75,8 +75,33 @@ jobs:
 
       - name: Push to AUR
         run: |
-          # Clone AUR repo and check if it needs updating
-          git clone ssh://aur@aur.archlinux.org/saphi-bin.git /tmp/aur-pkg
+          # Test SSH connectivity with retries
+          for i in 1 2 3; do
+            echo "SSH connection attempt $i..."
+            if ssh -T -o ConnectTimeout=10 aur@aur.archlinux.org 2>&1 | head -1; then
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "Failed to connect to AUR after 3 attempts"
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # Clone AUR repo (with retry)
+          for i in 1 2 3; do
+            echo "Clone attempt $i..."
+            if git clone ssh://aur@aur.archlinux.org/saphi-bin.git /tmp/aur-pkg; then
+              break
+            fi
+            if [ "$i" = "3" ]; then
+              echo "Failed to clone AUR repo after 3 attempts"
+              exit 1
+            fi
+            rm -rf /tmp/aur-pkg
+            sleep 5
+          done
+
           AUR_VER=$(grep '^pkgver=' /tmp/aur-pkg/PKGBUILD | cut -d= -f2)
           echo "AUR version: $AUR_VER"
           echo "Latest version: ${{ steps.release.outputs.pkgver }}"
