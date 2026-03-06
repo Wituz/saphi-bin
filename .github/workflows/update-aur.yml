@@ -102,16 +102,13 @@ jobs:
             sleep 5
           done
 
-          AUR_VER=$(grep '^pkgver=' /tmp/aur-pkg/PKGBUILD | cut -d= -f2)
-          echo "AUR version: $AUR_VER"
-          echo "Latest version: ${{ steps.release.outputs.pkgver }}"
-          if [ "$AUR_VER" = "${{ steps.release.outputs.pkgver }}" ]; then
+          # Copy updated files and check if anything changed
+          cp PKGBUILD .SRCINFO saphi.desktop /tmp/aur-pkg/
+          cd /tmp/aur-pkg
+          if git diff --quiet; then
             echo "AUR already up to date"
             exit 0
           fi
-          # Copy updated files (flat only, no subdirectories)
-          cp PKGBUILD .SRCINFO saphi.desktop /tmp/aur-pkg/
-          cd /tmp/aur-pkg
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
